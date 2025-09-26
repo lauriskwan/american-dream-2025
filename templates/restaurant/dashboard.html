@@ -1,0 +1,269 @@
+{% extends 'base.html' %}
+
+{% block title %}Queue Management - ReadyTable{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="flex justify-between items-center mb-8">
+        <h2 class="text-3xl font-bold text-gray-800">Queue Management Dashboard</h2>
+        <div class="text-sm text-gray-600">
+            Current wait time: <span class="font-semibold text-blue-600">{{ estimated_wait }}</span>
+        </div>
+    </div>
+
+    <!-- Queue Section -->
+    <div class="mb-8">
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+            <div class="px-6 py-4 bg-yellow-50 border-b">
+                <h3 class="text-lg font-semibold text-gray-800">Virtual Queue ({{ queue_orders.count }} waiting)</h3>
+            </div>
+            
+            {% if queue_orders %}
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Code</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wait Time</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for order in queue_orders %}
+                        <tr class="{% if forloop.first %}bg-green-50{% else %}hover:bg-gray-50{% endif %}">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-lg font-bold {% if forloop.first %}text-green-600{% else %}text-gray-900{% endif %}">
+                                    #{{ order.queue_position }}
+                                    {% if forloop.first %}<span class="text-sm text-green-600 ml-2">NEXT</span>{% endif %}
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-lg font-mono font-bold text-blue-600">{{ order.order_code }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">{{ order.customer_name }}</div>
+                                <div class="text-sm text-gray-500">Ordered: {{ order.created_at|date:"g:i A" }}</div>
+                            </td>
+                            <td class="px-6 py-4">
+                                <div class="text-sm text-gray-900">
+                                    {% for item in order.items.all %}
+                                        <div>{{ item.quantity }}x {{ item.menu_item.name }}</div>
+                                    {% endfor %}
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900">{{ order.created_at|timesince }} ago</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                {% if forloop.first %}
+                                <form method="post" action="{% url 'notify_diner' order.id %}" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition duration-200">
+                                        Notify Diner to Approach
+                                    </button>
+                                </form>
+                                {% else %}
+                                <span class="text-gray-400">Waiting in queue</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-8 text-center text-gray-500">
+                <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                </svg>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">No customers in queue</h3>
+                <p class="text-gray-600">New orders will appear here automatically.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Awaiting Arrival Section -->
+    {% if awaiting_orders %}
+    <div class="mb-8">
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+            <div class="px-6 py-4 bg-blue-50 border-b">
+                <h3 class="text-lg font-semibold text-gray-800">Awaiting Arrival ({{ awaiting_orders.count }} notified)</h3>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Code</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Target Arrival</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for order in awaiting_orders %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-lg font-mono font-bold text-blue-600">{{ order.order_code }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">{{ order.customer_name }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900">{{ order.target_arrival_time|date:"g:i A" }}</div>
+                            </td>
+                            <td class="px-6 py-4">
+                                <div class="text-sm text-gray-900">
+                                    {% for item in order.items.all %}
+                                        <div>{{ item.quantity }}x {{ item.menu_item.name }}</div>
+                                    {% endfor %}
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <form method="post" action="{% url 'update_order_status' order.id %}" class="inline">
+                                    {% csrf_token %}
+                                    <select name="status" onchange="this.form.submit()" 
+                                            class="text-sm border border-gray-300 rounded px-2 py-1">
+                                        {% for status_code, status_display in order.STATUS_CHOICES %}
+                                            <option value="{{ status_code }}" {% if order.status == status_code %}selected{% endif %}>
+                                                {{ status_display }}
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Active Orders Section -->
+    {% if active_orders %}
+    <div class="mb-8">
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+            <div class="px-6 py-4 bg-gray-50 border-b">
+                <h3 class="text-lg font-semibold text-gray-800">Active Orders ({{ active_orders.count }} in progress)</h3>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Code</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for order in active_orders %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-lg font-mono font-bold text-blue-600">{{ order.order_code }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">{{ order.customer_name }}</div>
+                            </td>
+                            <td class="px-6 py-4">
+                                <div class="text-sm text-gray-900">
+                                    {% for item in order.items.all %}
+                                        <div>{{ item.quantity }}x {{ item.menu_item.name }}</div>
+                                    {% endfor %}
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                                    {% if order.status == 'RECEIVED' %}bg-blue-100 text-blue-800
+                                    {% elif order.status == 'PREPARING' %}bg-orange-100 text-orange-800
+                                    {% elif order.status == 'READY' %}bg-green-100 text-green-800
+                                    {% endif %}">
+                                    {{ order.get_status_display }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <form method="post" action="{% url 'update_order_status' order.id %}" class="inline">
+                                    {% csrf_token %}
+                                    <select name="status" onchange="this.form.submit()" 
+                                            class="text-sm border border-gray-300 rounded px-2 py-1">
+                                        {% for status_code, status_display in order.STATUS_CHOICES %}
+                                            <option value="{{ status_code }}" {% if order.status == status_code %}selected{% endif %}>
+                                                {{ status_display }}
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Quick Actions -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h4 class="text-lg font-semibold text-gray-800 mb-2">Queue Stats</h4>
+            <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <span>In Queue:</span>
+                    <span class="font-medium">{{ queue_orders.count }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Awaiting Arrival:</span>
+                    <span class="font-medium">{{ awaiting_orders.count }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Current Wait:</span>
+                    <span class="font-medium">{{ estimated_wait }}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h4 class="text-lg font-semibold text-gray-800 mb-2">Actions</h4>
+            <div class="space-y-2">
+                <a href="{% url 'ai_copilot' %}" class="block w-full text-center bg-purple-600 text-white py-2 rounded hover:bg-purple-700 transition duration-200">
+                    AI Co-pilot
+                </a>
+                <button onclick="location.reload()" class="block w-full text-center bg-gray-600 text-white py-2 rounded hover:bg-gray-700 transition duration-200">
+                    Refresh Dashboard
+                </button>
+            </div>
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h4 class="text-lg font-semibold text-gray-800 mb-2">System Status</h4>
+            <div class="space-y-2 text-sm">
+                <div class="flex items-center">
+                    <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                    <span>Queue System: Online</span>
+                </div>
+                <div class="flex items-center">
+                    <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                    <span>Order Processing: Active</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-refresh dashboard every 30 seconds
+setInterval(function() {
+    location.reload();
+}, 30000);
+</script>
+{% endblock %}

@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (mirrors AWS RDS setup)
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: readytable
+      POSTGRES_USER: readytable_user
+      POSTGRES_PASSWORD: readytable_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U readytable_user -d readytable"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Django Web Application
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Database configuration (mirrors AWS RDS environment variables)
+      DATABASE_URL: postgresql://readytable_user:readytable_pass@db:5432/readytable
+      DB_NAME: readytable
+      DB_USER: readytable_user
+      DB_PASSWORD: readytable_pass
+      DB_HOST: db
+      DB_PORT: 5432
+      
+      # Django settings
+      DEBUG: "True"
+      SECRET_KEY: "django-insecure-local-dev-key-change-in-production"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,0.0.0.0"
+      
+      # AWS configuration placeholders (for production)
+      # AWS_ACCESS_KEY_ID: ""
+      # AWS_SECRET_ACCESS_KEY: ""
+      # AWS_STORAGE_BUCKET_NAME: ""
+      # AWS_S3_REGION_NAME: "us-east-1"
+      # COGNITO_USER_POOL_ID: ""
+      # COGNITO_APP_CLIENT_ID: ""
+      # AWS_Q_API_ENDPOINT: ""
+      
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn --bind 0.0.0.0:8000 --reload readytable.wsgi:application"
+
+volumes:
+  postgres_data:
+
+# AWS ECS Task Definition equivalent:
+# This docker-compose setup mirrors what will be deployed to AWS ECS
+# 
+# ECS Service Configuration:
+# - Task Definition: Uses the same Docker image built from this Dockerfile
+# - Network: AWS VPC with public/private subnets
+# - Load Balancer: Application Load Balancer for web traffic
+# - Database: Amazon RDS PostgreSQL instance
+# - Storage: Amazon S3 for static/media files
+# - Secrets: AWS Secrets Manager for database credentials
+# - Logging: CloudWatch Logs
+# 
+# Environment Variables for AWS:
+# - DB_HOST: RDS endpoint
+# - DB_NAME: RDS database name
+# - DB_USER: From AWS Secrets Manager
+# - DB_PASSWORD: From AWS Secrets Manager
+# - AWS_STORAGE_BUCKET_NAME: S3 bucket for static files
+# - COGNITO_USER_POOL_ID: For authentication
+# - AWS_Q_API_ENDPOINT: For AI features
