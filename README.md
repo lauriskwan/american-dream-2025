@@ -1,10 +1,10 @@
-# ReadyTable - Intelligent Dine-in Pre-ordering System
+# ReadyTable - Intelligent Virtual Queue System
 
-ReadyTable is a web application that allows diners to pre-order meals for a timed, dine-in experience, eliminating wait times. The platform leverages data analytics and generative AI to provide intelligent insights and operational efficiencies for partner restaurants.
+ReadyTable is a web application that eliminates restaurant wait times through an intelligent virtual queue system. Diners join a queue remotely, place their order, and receive notifications when it's time to arrive - ensuring their table is ready and their food is prepared and ready to be served the moment they sit down.
 
 ## 🏗️ Architecture Overview
 
-**Phase 1: Local PoC** - A fully functional version that runs locally
+**Phase 1: Local PoC** - A fully functional queue-based system that runs locally
 **Phase 2: AWS Deployment** - Scalable cloud deployment on AWS
 
 ### Technology Stack
@@ -73,24 +73,43 @@ ReadyTable is a web application that allows diners to pre-order meals for a time
 ## 📱 Features
 
 ### Customer Experience
-- **Menu Browsing**: View available dishes with descriptions and prices
-- **Timed Ordering**: Select arrival time for dine-in experience
-- **Order Confirmation**: Receive unique 4-character order code
-- **Real-time Status**: Track order preparation status
+- **Live Wait Times**: See current estimated wait before ordering
+- **Virtual Queue**: Join queue remotely without physical waiting
+- **Order Placement**: Select items while joining the queue
+- **Queue Position**: Real-time position tracking with unique order codes
+- **Smart Notifications**: System tells you when to head to restaurant
+- **Instant Service**: Food is prepared and ready to be served immediately upon seating
+- **Order Status**: Track progress from queue to completion
 
-### Restaurant Dashboard
-- **Order Management**: View orders sorted by arrival time
-- **Status Updates**: Update order status with automatic timestamp recording
-- **Real-time Dashboard**: Auto-refreshing interface for kitchen staff
-- **Quick Stats**: Overview of active orders and system status
+### Restaurant Queue Management
+- **Live Queue Dashboard**: View all customers in queue by arrival order
+- **Wait Time Display**: Real-time calculation based on capacity and queue
+- **Notify System**: One-click to notify next customer to approach
+- **Food Preparation Timing**: Coordinate kitchen prep with customer arrival notifications
+- **Multi-Status Tracking**: Queue → Awaiting Arrival → Received → Preparing → Ready → Completed
+- **Capacity Management**: Configure tables and average dining duration
 
 ### AI Co-pilot (Simulated)
-- **Intelligent Insights**: Ask questions about restaurant operations
-- **Popular Dishes Analysis**: Get data on best-selling items
+- **Queue Analytics**: Insights on wait times and queue efficiency
 - **Demand Forecasting**: Predict busy periods and staffing needs
 - **Revenue Analytics**: Track sales trends and optimization opportunities
 
 ## 🗄️ Database Models
+
+### RestaurantProfile
+- `name`: Restaurant name
+- `total_tables`: Maximum seating capacity
+- `currently_occupied_tables`: Real-time occupied count
+- `avg_dine_in_duration_minutes`: Average time customers spend dining
+
+### Order (Refactored for Queue System)
+- `customer_name`: Customer identifier
+- `order_code`: Unique 4-character code
+- `queue_position`: Position in virtual queue (auto-assigned)
+- `target_arrival_time`: System-calculated arrival time (set when notified)
+- `status`: IN_QUEUE → AWAITING_ARRIVAL → RECEIVED → PREPARING → READY → COMPLETED
+- `seated_at_time`: Timestamp when marked READY
+- `completed_at_time`: Timestamp when marked COMPLETED
 
 ### MenuItem
 - `name`: Dish name
@@ -98,16 +117,31 @@ ReadyTable is a web application that allows diners to pre-order meals for a time
 - `price`: Decimal price
 - `estimated_prep_time_minutes`: Kitchen preparation time estimate
 
-### Order
-- `customer_name`: Customer identifier
-- `order_code`: Unique 4-character code
-- `estimated_arrival_time`: When customer plans to arrive
-- `status`: RECEIVED → PREPARING → READY → COMPLETED
-- `seated_at_time`: Timestamp when marked READY
-- `completed_at_time`: Timestamp when marked COMPLETED
-
 ### OrderItem
 - Links orders to menu items with quantities
+
+## 🔧 Queue System Logic
+
+### Wait Time Calculation
+```python
+parties_in_queue = Order.objects.filter(status='IN_QUEUE').count()
+tables_to_free_up = parties_in_queue + currently_occupied_tables - total_tables
+wait_time_minutes = (tables_to_free_up / total_tables) * avg_dine_in_duration_minutes
+```
+
+### Customer Flow
+1. **View Wait Time**: Customer sees live estimated wait on menu page
+2. **Join Queue**: Place order and automatically join virtual queue
+3. **Queue Position**: Receive position number and order code
+4. **Wait Remotely**: Track status via order code
+5. **Notification**: Restaurant notifies when table is ready
+6. **Arrival**: Customer arrives just as table and food are prepared
+
+### Restaurant Flow
+1. **Queue Management**: View all customers in queue order
+2. **Capacity Monitoring**: Track occupied tables and wait times
+3. **Notify Next**: Click to notify first customer in queue
+4. **Status Updates**: Track customer from notification to completion
 
 ## 🔧 Configuration
 
@@ -240,26 +274,26 @@ The AI Co-pilot currently shows simulated responses. For production deployment w
            query=query,
            context={
                'restaurant_data': restaurant_data,
-               'menu_items': get_menu_analytics(),
-               'order_history': get_order_analytics()
+               'queue_analytics': get_queue_metrics(),
+               'wait_time_trends': get_wait_time_analytics()
            }
        )
        return response['insights']
    ```
 
 2. **Data Context**: The system will provide Amazon Q with:
-   - Real-time order data
-   - Menu performance metrics
-   - Customer timing patterns
-   - Revenue analytics
-   - Seasonal trends
+   - Real-time queue data
+   - Wait time patterns
+   - Customer arrival analytics
+   - Table turnover rates
+   - Revenue per queue position
 
 3. **Insight Categories**:
-   - Popular dish analysis
-   - Demand forecasting
-   - Revenue optimization
-   - Operational efficiency
-   - Customer behavior patterns
+   - Queue optimization strategies
+   - Wait time predictions
+   - Capacity planning recommendations
+   - Customer satisfaction metrics
+   - Revenue impact analysis
 
 ## 🔐 Security Considerations
 
@@ -286,7 +320,8 @@ The AI Co-pilot currently shows simulated responses. For production deployment w
 ### AWS Production
 - **Application Logs**: CloudWatch Logs
 - **Metrics**: CloudWatch metrics for ECS, RDS, ALB
-- **Alerts**: CloudWatch alarms for errors and performance
+- **Queue Metrics**: Custom metrics for wait times and queue length
+- **Alerts**: CloudWatch alarms for queue overflow and performance
 - **Tracing**: AWS X-Ray for request tracing
 - **Health Checks**: ALB health checks and ECS health monitoring
 
@@ -298,46 +333,27 @@ Run tests locally:
 python manage.py test
 ```
 
-For production deployment, consider:
-- Unit tests for models and views
-- Integration tests for API endpoints
-- Load testing for peak capacity planning
-- Security testing for authentication flows
+### Queue System Testing Scenarios
+- Multiple customers joining queue simultaneously
+- Restaurant notification workflow
+- Wait time calculation accuracy
+- Queue position updates
+- Status transition validation
 
 ## 📈 Scaling Considerations
 
 ### Horizontal Scaling
-- **ECS Service**: Auto Scaling based on CPU/memory
-- **Database**: RDS read replicas for read-heavy workloads
+- **ECS Service**: Auto Scaling based on queue length and CPU/memory
+- **Database**: RDS read replicas for queue analytics
 - **CDN**: CloudFront for static asset delivery
-- **Caching**: ElastiCache for session and query caching
+- **Caching**: ElastiCache for queue state and wait time calculations
 
 ### Performance Optimization
-- Database indexing on frequently queried fields
-- Connection pooling for database connections
-- Async task processing for heavy operations
-- Image optimization for menu photos
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🆘 Support
-
-For issues and questions:
-1. Check the GitHub Issues page
-2. Review the AWS deployment logs in CloudWatch
-3. Verify environment variable configuration
-4. Test with local Docker setup first
+- Database indexing on queue_position and status fields
+- Real-time queue updates via WebSockets (future enhancement)
+- Async notifications for customer alerts
+- Queue analytics pre-computation
 
 ---
 
-**ReadyTable** - Transforming the dining experience through intelligent pre-ordering and AI-powered restaurant insights.
+**ReadyTable** - Eliminating restaurant wait times through intelligent virtual queue management and AI-powered operational insights.
